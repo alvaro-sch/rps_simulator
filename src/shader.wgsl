@@ -25,7 +25,12 @@ fn vertex(in: VertexInput) -> VertexOutput {
     return out;
 }
 
+@group(1) @binding(0)
+var texture: texture_2d<f32>;
+@group(1) @binding(1)
+var texture_sampler: sampler;
+
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
-    return vec4<f32>(1.0);
+    return textureSample(texture, texture_sampler, in.uv);
 }

@@ -17,6 +17,7 @@ pub struct Renderer {
     render_pipeline: wgpu::RenderPipeline,
     projection: Projection,
     mesh: Mesh,
+    texture: Texture,
 }
 
 impl Renderer {
@@ -50,10 +51,14 @@ impl Renderer {
         let (projection, projection_bind_group_layout) =
             Projection::new(&device, size.width, size.height);
 
+        let (texture, texture_bind_group_layout) =
+            Texture::from_filepath(&device, &queue, "polar_bear.png")
+                .expect("failed to create texture");
+
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render pipeline layout"),
-                bind_group_layouts: &[&projection_bind_group_layout],
+                bind_group_layouts: &[&projection_bind_group_layout, &texture_bind_group_layout],
                 push_constant_ranges: &[],
             });
 
@@ -94,7 +99,7 @@ impl Renderer {
             multiview: None,
         });
 
-        let mesh = Mesh::rect(&device, 10.0, 10.0);
+        let mesh = Mesh::rect(&device, 60.0, 60.0);
 
         Self {
             surface,
@@ -104,6 +109,7 @@ impl Renderer {
             projection,
             render_pipeline,
             mesh,
+            texture,
         }
     }
 
@@ -147,6 +153,7 @@ impl Renderer {
 
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, self.projection.bind_group(), &[]);
+        render_pass.set_bind_group(1, self.texture.bind_group(), &[]);
         render_pass.draw_mesh(&self.mesh);
 
         drop(render_pass);
