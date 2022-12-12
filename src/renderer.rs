@@ -52,7 +52,7 @@ impl Renderer {
             Projection::new(&device, size.width, size.height);
 
         let (texture, texture_bind_group_layout) =
-            Texture::from_filepath(&device, &queue, "polar_bear.png")
+            Texture::from_filepath(&device, &queue, "assets/polar_bear.png")
                 .expect("failed to create texture");
 
         let render_pipeline_layout =

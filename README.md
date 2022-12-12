@@ -4,6 +4,7 @@ Rock Paper Scissors simulator, based on [this tweet](https://twitter.com/juanbui
 written in [Rust](https://www.rust-lang.org/) using the [wgpu](https://wgpu.rs/) API to make the experience a _little_ more painful.
 
 ## TODO
-- Textures
-- Transformations and instanced rendering
+- ~~Textures~~
+- ~~Transformations~~
+- Instanced rendering
 - The actual simulator
