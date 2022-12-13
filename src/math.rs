@@ -72,6 +72,12 @@ impl Transform {
     }
 }
 
+impl Into<[f32; 9]> for Transform {
+    fn into(self) -> [f32; 9] {
+        self.0
+    }
+}
+
 impl Mul for Transform {
     type Output = Transform;
 
