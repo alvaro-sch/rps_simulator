@@ -22,7 +22,22 @@ impl From<Rad> for Deg {
 pub struct Transform(pub [f32; 9]);
 
 impl Transform {
-    pub fn identity() -> Self {
+    pub const fn col_major(t: [f32; 9]) -> Self {
+        Self(t)
+    }
+
+    pub const fn row_major(t: [f32; 9]) -> Self {
+        #[rustfmt::skip]
+        let t = [
+            t[0], t[3], t[6],
+            t[1], t[4], t[7],
+            t[2], t[5], t[8],
+        ];
+
+        Self(t)
+    }
+
+    pub const fn identity() -> Self {
         #[rustfmt::skip]
         let id3 = [
             1.0, 0.0, 0.0,
@@ -36,9 +51,9 @@ impl Transform {
     pub fn translate(self, offset: [f32; 2]) -> Self {
         #[rustfmt::skip]
         let translation = [
-            1.0, 0.0, offset[0],
-            0.0, 1.0, offset[1],
-            0.0, 0.0, 1.0,
+            1.0,       0.0,       0.0,
+            0.0,       1.0,       0.0,
+            offset[0], offset[1], 1.0,
         ];
 
         Self(translation) * self
@@ -63,8 +78,8 @@ impl Transform {
 
         #[rustfmt::skip]
         let rotation = [
-            cos_theta, -sin_theta, 0.0,
-            sin_theta,  cos_theta, 0.0,
+            cos_theta,  sin_theta, 0.0,
+            -sin_theta, cos_theta, 0.0,
             0.0,        0.0,       1.0,
         ];
 
@@ -86,17 +101,17 @@ impl Mul for Transform {
         let y = rhs.0;
 
         let mut z = [0.0; 9];
-        z[0] = x[0] * y[0] + x[1] * y[3] + x[2] * y[6];
-        z[1] = x[0] * y[1] + x[1] * y[4] + x[2] * y[7];
-        z[2] = x[0] * y[2] + x[1] * y[5] + x[2] * y[8];
+        z[0] = x[0] * y[0] + x[3] * y[1] + x[6] * y[2];
+        z[1] = x[1] * y[0] + x[4] * y[1] + x[7] * y[2];
+        z[2] = x[2] * y[0] + x[5] * y[1] + x[8] * y[2];
 
-        z[3] = x[3] * y[0] + x[4] * y[3] + x[5] * y[6];
-        z[4] = x[3] * y[1] + x[4] * y[4] + x[5] * y[7];
-        z[5] = x[3] * y[2] + x[4] * y[5] + x[5] * y[8];
+        z[3] = x[0] * y[3] + x[3] * y[4] + x[6] * y[5];
+        z[4] = x[1] * y[3] + x[4] * y[4] + x[7] * y[5];
+        z[5] = x[2] * y[3] + x[5] * y[4] + x[8] * y[5];
 
-        z[6] = x[6] * y[0] + x[7] * y[3] + x[8] * y[6];
-        z[7] = x[6] * y[1] + x[7] * y[4] + x[8] * y[7];
-        z[8] = x[6] * y[2] + x[7] * y[5] + x[8] * y[8];
+        z[6] = x[0] * y[6] + x[3] * y[7] + x[6] * y[8];
+        z[7] = x[1] * y[6] + x[4] * y[7] + x[7] * y[8];
+        z[8] = x[2] * y[6] + x[5] * y[7] + x[8] * y[8];
 
         Self(z)
     }
@@ -152,21 +167,21 @@ mod tests {
         let identity = Transform::identity();
 
         #[rustfmt::skip]
-        let x = Transform([
+        let x = Transform::row_major([
             1.0, 2.0, 3.0,
             4.0, 5.0, 6.0,
             7.0, 8.0, 9.0,
         ]);
 
         #[rustfmt::skip]
-        let y = Transform([
+        let y = Transform::row_major([
             1.1, 8.3, 1.0,
             6.4, 5.2, 6.0,
             3.9, 4.3, 7.1,
         ]);
 
         #[rustfmt::skip]
-        let z = Transform([
+        let z = Transform::row_major([
             25.6, 31.6,  34.3,
             59.8, 85.0,  76.6,
             94.0, 138.4, 118.9,
@@ -189,28 +204,28 @@ mod tests {
         let t4 = t3.rotate(Rad(-2.23));
 
         #[rustfmt::skip]
-        let t1_expected = Transform([
+        let t1_expected = Transform::row_major([
             2.3, 0.0, 0.0,
             0.0, 1.7, 0.0,
             0.0, 0.0, 1.0,
         ]);
 
         #[rustfmt::skip]
-        let t2_expected = Transform([
+        let t2_expected = Transform::row_major([
             1.6263455, -1.2020816, 0.0,
             1.6263455,  1.2020816, 0.0,
             0.0,        0.0,       1.0,
         ]);
 
         #[rustfmt::skip]
-        let t3_expected = Transform([
+        let t3_expected = Transform::row_major([
             1.6263455, -1.2020816, 33.8,
             1.6263455,  1.2020816, 4.9,
             0.0,        0.0,       1.0,
         ]);
 
         #[rustfmt::skip]
-        let t4_expected = Transform([
+        let t4_expected = Transform::row_major([
             0.28947747, 1.6864817,  -16.828728,
             -2.2817101, 0.21396166, -29.719418,
             0.0,        0.0,        1.0,
