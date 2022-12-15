@@ -1,11 +1,15 @@
+mod instance;
 mod mesh;
 mod projection;
 mod texture;
 
+use crate::Transform;
+
 use self::projection::*;
-pub use self::{mesh::*, texture::*};
+pub use self::{instance::*, mesh::*, texture::*};
 
 use pollster::FutureExt as _;
+use wgpu::util::DeviceExt;
 use winit::window::Window;
 
 #[derive(Debug)]
@@ -18,6 +22,7 @@ pub struct Renderer {
     projection: Projection,
     mesh: Mesh,
     texture: Texture,
+    instance_buffer: wgpu::Buffer,
 }
 
 impl Renderer {
@@ -52,7 +57,7 @@ impl Renderer {
             Projection::new(&device, size.width, size.height);
 
         let (texture, texture_bind_group_layout) =
-            Texture::from_filepath(&device, &queue, "assets/polar_bear.png")
+            Texture::from_filepath(&device, &queue, "assets/rps_atlas.png", 3, 1)
                 .expect("failed to create texture");
 
         let render_pipeline_layout =
@@ -64,13 +69,26 @@ impl Renderer {
 
         let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
 
+        let instances = [(10.0, 0, 0), (80.0, 1, 0), (150.0, 2, 0)]
+            .into_iter()
+            .map(|(x, uv_x, uv_y)| {
+                Instance::new(Transform::identity().translate([x, 10.0]), [uv_x, uv_y])
+            })
+            .collect::<Vec<_>>();
+
+        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Instance buffer"),
+            contents: bytemuck::cast_slice(&instances),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render pipeline"),
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vertex",
-                buffers: &[Vertex::layout()],
+                buffers: &[Vertex::layout(), Instance::layout()],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
@@ -110,6 +128,7 @@ impl Renderer {
             render_pipeline,
             mesh,
             texture,
+            instance_buffer,
         }
     }
 
@@ -154,7 +173,8 @@ impl Renderer {
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, self.projection.bind_group(), &[]);
         render_pass.set_bind_group(1, self.texture.bind_group(), &[]);
-        render_pass.draw_mesh(&self.mesh);
+        render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
+        render_pass.draw_mesh_instanced(&self.mesh, 0..3);
 
         drop(render_pass);
 
