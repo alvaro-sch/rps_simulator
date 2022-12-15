@@ -87,9 +87,9 @@ impl Transform {
     }
 }
 
-impl Into<[f32; 9]> for Transform {
-    fn into(self) -> [f32; 9] {
-        self.0
+impl From<Transform> for [f32; 9] {
+    fn from(t: Transform) -> Self {
+        t.0
     }
 }
 
