@@ -1,4 +1,7 @@
+use std::ops::Range;
+
 use bytemuck::{Pod, Zeroable};
+use wgpu::util::DeviceExt;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
@@ -27,5 +30,38 @@ impl Instance {
             model: model.into(),
             uv_index,
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct InstanceBuffer {
+    buffer: wgpu::Buffer,
+    range: Range<u32>,
+}
+
+impl InstanceBuffer {
+    pub fn new(device: &wgpu::Device, instances: &[Instance]) -> Self {
+        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Instance Buffer"),
+            contents: bytemuck::cast_slice(instances),
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        });
+
+        Self {
+            buffer,
+            range: 0..instances.len() as u32,
+        }
+    }
+
+    pub fn update(&self, queue: &wgpu::Queue, offset: wgpu::BufferAddress, data: &[Instance]) {
+        queue.write_buffer(&self.buffer, offset, bytemuck::cast_slice(data))
+    }
+
+    pub fn buffer(&self) -> &wgpu::Buffer {
+        &self.buffer
+    }
+
+    pub fn range(&self) -> Range<u32> {
+        self.range.clone()
     }
 }

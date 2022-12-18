@@ -3,6 +3,8 @@ mod mesh;
 mod projection;
 mod texture;
 
+use std::path::Path;
+
 use crate::Transform;
 
 use self::projection::*;
@@ -13,6 +15,13 @@ use wgpu::util::DeviceExt;
 use winit::window::Window;
 
 #[derive(Debug)]
+pub struct DrawCommand<'a> {
+    pub texture_attachment: Option<&'a Texture>,
+    pub instance_buffer: Option<&'a InstanceBuffer>,
+    pub mesh: &'a Mesh,
+}
+
+#[derive(Debug)]
 pub struct Renderer {
     surface: wgpu::Surface,
     device: wgpu::Device,
@@ -20,9 +29,8 @@ pub struct Renderer {
     config: wgpu::SurfaceConfiguration,
     render_pipeline: wgpu::RenderPipeline,
     projection: Projection,
-    mesh: Mesh,
-    texture: Texture,
-    instance_buffer: wgpu::Buffer,
+    default_texture: Texture,
+    default_instance_buffer: wgpu::Buffer,
 }
 
 impl Renderer {
@@ -56,9 +64,9 @@ impl Renderer {
         let (projection, projection_bind_group_layout) =
             Projection::new(&device, size.width, size.height);
 
-        let (texture, texture_bind_group_layout) =
-            Texture::from_filepath(&device, &queue, "assets/rps_atlas.png", 3, 1)
-                .expect("failed to create texture");
+        let blank_image = image::DynamicImage::ImageRgba8(image::RgbaImage::new(16, 16));
+        let (default_texture, texture_bind_group_layout) =
+            Texture::from_image(&device, &queue, &blank_image, 1, 1).unwrap();
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -69,18 +77,13 @@ impl Renderer {
 
         let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
 
-        let instances = [(10.0, 0, 0), (80.0, 1, 0), (150.0, 2, 0)]
-            .into_iter()
-            .map(|(x, uv_x, uv_y)| {
-                Instance::new(Transform::identity().translate([x, 10.0]), [uv_x, uv_y])
-            })
-            .collect::<Vec<_>>();
-
-        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Instance buffer"),
-            contents: bytemuck::cast_slice(&instances),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
+        let default_instance = Instance::new(Transform::identity(), [0, 0]);
+        let default_instance_buffer =
+            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Instance buffer"),
+                contents: bytemuck::cast_slice(&[default_instance]),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render pipeline"),
@@ -117,8 +120,6 @@ impl Renderer {
             multiview: None,
         });
 
-        let mesh = Mesh::rect(&device, 60.0, 60.0);
-
         Self {
             surface,
             device,
@@ -126,9 +127,8 @@ impl Renderer {
             config,
             projection,
             render_pipeline,
-            mesh,
-            texture,
-            instance_buffer,
+            default_texture,
+            default_instance_buffer,
         }
     }
 
@@ -145,7 +145,7 @@ impl Renderer {
             .resize(&self.queue, new_size.width, new_size.height);
     }
 
-    pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(&mut self, command: &DrawCommand) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
         let output_view = output
             .texture
@@ -172,9 +172,23 @@ impl Renderer {
 
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, self.projection.bind_group(), &[]);
-        render_pass.set_bind_group(1, self.texture.bind_group(), &[]);
-        render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
-        render_pass.draw_mesh_instanced(&self.mesh, 0..3);
+
+        if let Some(texture) = command.texture_attachment {
+            render_pass.set_bind_group(1, texture.bind_group(), &[]);
+        } else {
+            render_pass.set_bind_group(1, self.default_texture.bind_group(), &[]);
+        }
+
+        let instance_range;
+        if let Some(instance_buffer) = command.instance_buffer {
+            instance_range = instance_buffer.range();
+            render_pass.set_vertex_buffer(1, instance_buffer.buffer().slice(..));
+        } else {
+            instance_range = 0..1;
+            render_pass.set_vertex_buffer(1, self.default_instance_buffer.slice(..));
+        }
+
+        render_pass.draw_mesh_instanced(command.mesh, instance_range);
 
         drop(render_pass);
 
@@ -182,5 +196,32 @@ impl Renderer {
         output.present();
 
         Ok(())
+    }
+
+    pub fn create_mesh(&self, width: f32, height: f32) -> Mesh {
+        Mesh::rect(&self.device, width, height)
+    }
+
+    pub fn load_texture_atlas<P>(
+        &self,
+        filepath: P,
+        grid_width: u32,
+        grid_height: u32,
+    ) -> anyhow::Result<Texture>
+    where
+        P: AsRef<Path>,
+    {
+        let (texture, _) =
+            Texture::from_filepath(&self.device, &self.queue, filepath, grid_width, grid_height)?;
+
+        Ok(texture)
+    }
+
+    pub fn create_instance_buffer(&self, instances: &[Instance]) -> InstanceBuffer {
+        InstanceBuffer::new(&self.device, instances)
+    }
+
+    pub fn update_instance_buffer(&self, instance_buffer: &InstanceBuffer, data: &[Instance]) {
+        instance_buffer.update(&self.queue, 0, data)
     }
 }
