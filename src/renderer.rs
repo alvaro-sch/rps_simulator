@@ -1,3 +1,4 @@
+mod command;
 mod instance;
 mod mesh;
 mod projection;
@@ -8,18 +9,11 @@ use std::path::Path;
 use crate::Transform;
 
 use self::projection::*;
-pub use self::{instance::*, mesh::*, texture::*};
+pub use self::{command::*, instance::*, mesh::*, texture::*};
 
 use pollster::FutureExt as _;
 use wgpu::util::DeviceExt;
 use winit::window::Window;
-
-#[derive(Debug)]
-pub struct DrawCommand<'a> {
-    pub texture_attachment: Option<&'a Texture>,
-    pub instance_buffer: Option<&'a InstanceBuffer>,
-    pub mesh: &'a Mesh,
-}
 
 #[derive(Debug)]
 pub struct Renderer {
@@ -145,27 +139,44 @@ impl Renderer {
             .resize(&self.queue, new_size.width, new_size.height);
     }
 
-    pub fn draw(&mut self, command: &DrawCommand) -> Result<(), wgpu::SurfaceError> {
-        let output = self.surface.get_current_texture()?;
-        let output_view = output
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-
-        let mut command_encoder =
-            self.device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Command encoder"),
-                });
-
-        let mut render_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+    pub fn clear(
+        &mut self,
+        view: &wgpu::TextureView,
+        encoder: &mut wgpu::CommandEncoder,
+        color: &wgpu::Color,
+    ) {
+        encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Render Pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &output_view,
+                view,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    load: wgpu::LoadOp::Clear(*color),
                     store: true,
                 },
+            })],
+            depth_stencil_attachment: None,
+        });
+    }
+
+    pub fn draw_mesh(
+        &mut self,
+        view: &wgpu::TextureView,
+        encoder: &mut wgpu::CommandEncoder,
+        command: &DrawMeshCommand,
+    ) {
+        let load = if let Some(color) = command.clear_color {
+            wgpu::LoadOp::Clear(color)
+        } else {
+            wgpu::LoadOp::Load
+        };
+
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Render Pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view,
+                resolve_target: None,
+                ops: wgpu::Operations { load, store: true },
             })],
             depth_stencil_attachment: None,
         });
@@ -189,10 +200,26 @@ impl Renderer {
         }
 
         render_pass.draw_mesh_instanced(command.mesh, instance_range);
+    }
 
-        drop(render_pass);
+    pub fn draw(&mut self, command: &DrawCommand) -> Result<(), wgpu::SurfaceError> {
+        let output = self.surface.get_current_texture()?;
+        let view = output
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
 
-        self.queue.submit(std::iter::once(command_encoder.finish()));
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Command encoder"),
+            });
+
+        match command {
+            DrawCommand::Clear(color) => self.clear(&view, &mut encoder, color),
+            DrawCommand::DrawMesh(command) => self.draw_mesh(&view, &mut encoder, command),
+        }
+
+        self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
 
         Ok(())

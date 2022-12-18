@@ -47,11 +47,12 @@ fn main() {
         },
 
         Event::RedrawRequested(id) if id == window.id() => {
-            let draw_command = DrawCommand {
+            let draw_command = DrawCommand::DrawMesh(DrawMeshCommand {
                 texture_attachment: Some(&texture),
                 instance_buffer: Some(&instance_buffer),
+                clear_color: None,
                 mesh: &mesh,
-            };
+            });
 
             match renderer.draw(&draw_command) {
                 Ok(_) => {}
