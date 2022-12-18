@@ -145,7 +145,7 @@ impl Renderer {
             .resize(&self.queue, new_size.width, new_size.height);
     }
 
-    pub fn render(&mut self, command: &DrawCommand) -> Result<(), wgpu::SurfaceError> {
+    pub fn draw(&mut self, command: &DrawCommand) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
         let output_view = output
             .texture

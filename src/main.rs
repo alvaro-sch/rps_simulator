@@ -53,7 +53,7 @@ fn main() {
                 mesh: &mesh,
             };
 
-            match renderer.render(&draw_command) {
+            match renderer.draw(&draw_command) {
                 Ok(_) => {}
                 Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
                 Err(wgpu::SurfaceError::Lost) => renderer.resize(window.inner_size()),
