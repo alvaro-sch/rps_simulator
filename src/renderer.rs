@@ -4,22 +4,21 @@ mod mesh;
 mod projection;
 mod texture;
 
-use std::path::Path;
-
 use crate::Transform;
 
 use self::projection::*;
 pub use self::{command::*, instance::*, mesh::*, texture::*};
 
+use anyhow::Result;
 use pollster::FutureExt as _;
 use wgpu::util::DeviceExt;
 use winit::window::Window;
 
 #[derive(Debug)]
 pub struct Renderer {
+    pub device: wgpu::Device,
+    pub queue: wgpu::Queue,
     surface: wgpu::Surface,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     render_pipeline: wgpu::RenderPipeline,
     projection: Projection,
@@ -28,8 +27,8 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(window: &Window) -> Self {
-        let instance = wgpu::Instance::new(wgpu::Backends::all());
+    pub fn new(window: &Window, backends: wgpu::Backends) -> Result<Self> {
+        let instance = wgpu::Instance::new(backends);
         let surface = unsafe { instance.create_surface(window) };
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -37,12 +36,11 @@ impl Renderer {
                 ..Default::default()
             })
             .block_on()
-            .expect("could not find suitable adapter for rendering");
+            .ok_or_else(|| anyhow::anyhow!("Could not find suitable adapter"))?;
 
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor::default(), None)
-            .block_on()
-            .expect("could not initialize adapter");
+            .block_on()?;
 
         let size = window.inner_size();
         let config = wgpu::SurfaceConfiguration {
@@ -114,7 +112,7 @@ impl Renderer {
             multiview: None,
         });
 
-        Self {
+        Ok(Self {
             surface,
             device,
             queue,
@@ -123,7 +121,7 @@ impl Renderer {
             render_pipeline,
             default_texture,
             default_instance_buffer,
-        }
+        })
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
@@ -223,32 +221,5 @@ impl Renderer {
         output.present();
 
         Ok(())
-    }
-
-    pub fn create_mesh(&self, width: f32, height: f32) -> Mesh {
-        Mesh::rect(&self.device, width, height)
-    }
-
-    pub fn load_texture_atlas<P>(
-        &self,
-        filepath: P,
-        grid_width: u32,
-        grid_height: u32,
-    ) -> anyhow::Result<Texture>
-    where
-        P: AsRef<Path>,
-    {
-        let (texture, _) =
-            Texture::from_filepath(&self.device, &self.queue, filepath, grid_width, grid_height)?;
-
-        Ok(texture)
-    }
-
-    pub fn create_instance_buffer(&self, instances: &[Instance]) -> InstanceBuffer {
-        InstanceBuffer::new(&self.device, instances)
-    }
-
-    pub fn update_instance_buffer(&self, instance_buffer: &InstanceBuffer, data: &[Instance]) {
-        instance_buffer.update(&self.queue, 0, data)
     }
 }
